@@ -1,0 +1,6 @@
+{
+  "name": "Bolsa Monitor",
+  "description": "Monitoramento e comparador de ativos da bolsa de valores em tempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

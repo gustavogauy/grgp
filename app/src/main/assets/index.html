@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Bolsa Monitor</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              950: '#080a10',
+              900: '#111524',
+              800: '#1c2238',
+              700: '#2e3757'
+            },
+            emerald: {
+              400: '#34d399',
+              500: '#10b981',
+              600: '#059669',
+              900: '#064e3b'
+            },
+            rose: {
+              400: '#f87171',
+              500: '#ef4444',
+              600: '#dc2626',
+              900: '#7f1d1d'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    :root {
+      --glass: rgba(255, 255, 255, 0.04);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --accent: #7C4DFF;
+      --up: #10B981;
+      --down: #ef4444;
+    }
+    
+    .mesh-bg {
+      background-image: 
+        radial-gradient(at 0% 0%, #15182e 0%, transparent 60%),
+        radial-gradient(at 100% 100%, #1c102a 0%, transparent 60%);
+      background-color: #080a10;
+    }
+    
+    .glass-card {
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+    }
+    
+    /* Custom scrollbars for a cleaner visual presence */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 99px;
+    }
+    
+    /* Price pulsation animation to mimic real-time financial terminals */
+    @keyframes pulse-green {
+      0%, 100% { background-color: transparent; }
+      50% { background-color: rgba(16, 185, 129, 0.2); }
+    }
+    @keyframes pulse-red {
+      0%, 100% { background-color: transparent; }
+      50% { background-color: rgba(239, 68, 68, 0.2); }
+    }
+    .flash-up {
+      animation: pulse-green 1s ease-in-out;
+    }
+    .flash-down {
+      animation: pulse-red 1s ease-in-out;
+    }
+    
+    /* Touch optimization */
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+  </style>
+</head>
+<body class="mesh-bg text-slate-100 h-full flex flex-col font-sans overflow-x-hidden">
+
+  <!-- Header Section -->
+  <header class="bg-white/[0.02] backdrop-blur-lg border-b border-white/[0.06] px-4 py-3.5 flex items-center justify-between sticky top-0 z-40 shrink-0">
+    <div class="flex items-center space-x-3">
+      <!-- High-tech Logo Icon -->
+      <div class="p-2 bg-gradient-to-tr from-violet-600 to-indigo-600 rounded-xl shadow-lg shadow-indigo-500/20">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-base font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-slate-400">Bolsa Monitor</h1>
+        <p class="text-[10px] text-slate-400 font-mono tracking-wider uppercase">Painel de Alta Frequência</p>
+      </div>
+    </div>
+    
+    <!-- Connection Status Badge -->
+    <div class="flex items-center space-x-1.5 bg-white/[0.04] px-3 py-1 rounded-full border border-white/[0.08] backdrop-blur-sm shadow-sm">
+      <span id="connection-indicator" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span id="connection-text" class="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider">Simulado</span>
+    </div>
+  </header>
+
+  <!-- Main Content Wrapper (Scrollable) -->
+  <main class="flex-1 overflow-y-auto px-4 py-5 space-y-6 pb-28">
+
+    <!-- Active Section Tab Picker (For mobile focus) -->
+    <div class="flex bg-white/[0.02] backdrop-blur-md p-1.5 rounded-2xl border border-white/[0.06] shadow-inner">
+      <button onclick="switchTab('dashboard')" id="tab-dashboard" class="flex-1 text-center py-2.5 text-xs font-bold rounded-xl transition-all duration-200 bg-white/[0.08] border border-white/[0.12] text-white shadow-sm">
+        Mercado (Top 10)
+      </button>
+      <button onclick="switchTab('wallet')" id="tab-wallet" class="flex-1 text-center py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 text-slate-400 hover:text-white">
+        Minha Carteira
+      </button>
+      <button onclick="switchTab('comparator')" id="tab-comparator" class="flex-1 text-center py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 text-slate-400 hover:text-white">
+        Comparador
+      </button>
+    </div>
+
+    <!-- 1. DASHBOARD VIEW -->
+    <div id="view-dashboard" class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex flex-col">
+          <h2 class="text-xs font-extrabold text-slate-300 uppercase tracking-widest">Top 10 Altas (24h)</h2>
+          <p class="text-[11px] text-slate-500">Ativos com maior valorização intraday</p>
+        </div>
+        <span class="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-md">B3 Autopilot</span>
+      </div>
+
+      <!-- Live tickers list -->
+      <div id="top-10-list" class="space-y-3">
+        <!-- Inside each element, a neat compact structure -->
+        <div class="animate-pulse glass-card h-16 rounded-2xl"></div>
+        <div class="animate-pulse glass-card h-16 rounded-2xl"></div>
+        <div class="animate-pulse glass-card h-16 rounded-2xl"></div>
+      </div>
+    </div>
+
+    <!-- 2. WATCH_LIST / CARTEIRA VIEW -->
+    <div id="view-wallet" class="space-y-4 hidden">
+      <div class="glass-card p-4.5 rounded-2xl shadow-md space-y-4">
+        <div>
+          <h3 class="text-sm font-bold text-slate-200">Adicionar à Carteira</h3>
+          <p class="text-xs text-slate-400">Insira até 10 tickers de ações ou FIIs para monitorar (Ex: PETR4, VALE3, MXRF11).</p>
+        </div>
+        
+        <!-- Input Form -->
+        <div class="flex space-x-2">
+          <div class="relative flex-1">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500 text-xs font-mono font-bold select-none">
+              TICKER:
+            </span>
+            <input type="text" id="ticker-input" placeholder="VALE3" 
+                   class="w-full bg-white/[0.02] border border-white/[0.08] text-white placeholder-slate-600 pl-20 pr-3 py-3 rounded-xl focus:outline-none focus:border-indigo-500 text-xs font-mono font-bold uppercase tracking-wider transition-all shadow-inner">
+          </div>
+          <button onclick="addTickerFromInput()" class="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold px-4 py-3 rounded-xl text-xs tracking-wide transition-all shadow-md flex items-center space-x-1 shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Adicionar</span>
+          </button>
+        </div>
+        
+        <!-- List limit indicator -->
+        <div class="flex items-center justify-between text-[11px] text-slate-500 px-1 font-mono">
+          <span>Capacidade de monitoramento:</span>
+          <span id="wallet-count-badge" class="text-slate-300 font-bold">0 / 10 ativos</span>
+        </div>
+      </div>
+
+      <!-- Wallet Tick Cards -->
+      <div id="wallet-list" class="space-y-3">
+        <!-- Loaded dynamically -->
+        <div class="text-center py-8 text-xs text-slate-500 glass-card rounded-2xl border-dashed">
+          Nenhum ativo cadastrado na carteira pessoal. Adicione acima!
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. COMPARATOR VIEW -->
+    <div id="view-comparator" class="space-y-4 hidden">
+      <div class="flex flex-col">
+        <h2 class="text-xs font-extrabold text-slate-300 uppercase tracking-widest">Comparador de Indicadores</h2>
+        <p class="text-[11px] text-slate-500">Selecione até 4 ativos para comparar métricas chave em tempo real</p>
+      </div>
+
+      <!-- Quick Selector Panel -->
+      <div class="glass-card p-4 rounded-2xl shadow-md space-y-3">
+        <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">Selecione para Comparar:</span>
+        <div id="comparator-selector-pills" class="flex flex-wrap gap-2">
+          <!-- Selection pills loaded dynamically -->
+          <div class="text-[11px] text-slate-500 italic py-1">Carregando ativos disponíveis...</div>
+        </div>
+      </div>
+
+      <!-- Comparison Metrics Card -->
+      <div id="comparison-display" class="hidden space-y-4">
+        <!-- Chart Canvas Container -->
+        <div class="glass-card p-4 rounded-2xl shadow-md">
+          <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3 font-mono">Variação % Comparada (Intraday)</h4>
+          <div class="relative w-full h-44">
+            <canvas id="comparator-chart"></canvas>
+          </div>
+        </div>
+
+        <!-- Comparative Metrics Table/Cards -->
+        <div class="glass-card rounded-2xl overflow-hidden shadow-md">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-white/[0.02] border-b border-white/[0.06] text-slate-400 font-mono uppercase text-[10px]">
+                <tr>
+                  <th class="p-3">Ativo</th>
+                  <th class="p-3 text-right">Preço</th>
+                  <th class="p-3 text-right">Variação 24h</th>
+                  <th class="p-3 text-right">Mín (Dia)</th>
+                  <th class="p-3 text-right">Máx (Dia)</th>
+                </tr>
+              </thead>
+              <tbody id="comparison-table-body" class="divide-y divide-white/[0.04] font-mono">
+                <!-- Data populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state for Comparator -->
+      <div id="comparison-empty-state" class="text-center py-10 glass-card bg-transparent border-dashed rounded-2xl space-y-3">
+        <div class="mx-auto w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-slate-500">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </div>
+        <p class="text-xs text-slate-400">Marque ao menos 2 ativos no painel acima para iniciar o comparativo.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Absolute Floating Alarm Alert Trigger -->
+  <div id="alert-toast" class="fixed bottom-20 left-1/2 -translate-x-1/2 bg-slate-950/80 backdrop-blur-md border border-white/10 text-slate-100 px-4 py-2.5 rounded-xl shadow-2xl text-[11px] font-semibold tracking-wide flex items-center space-x-2.5 transition-all duration-300 opacity-0 pointer-events-none transform translate-y-3 z-50">
+    <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    </svg>
+    <span id="alert-toast-text">Alerta genérico</span>
+  </div>
+
+  <!-- Real-time dynamic simulator control bar at footer -->
+  <footer class="fixed bottom-0 left-0 right-0 bg-white/[0.02] backdrop-blur-lg border-t border-white/[0.06] py-3.5 px-4 flex items-center justify-between z-30 select-none">
+    <div class="flex items-center space-x-2">
+      <div id="simulation-indicator" class="w-2 h-2 rounded-full bg-emerald-500"></div>
+      <span class="text-[10px] text-slate-400 font-mono">Simulador de Pregão: <strong id="simulation-status">Ativo (3s)</strong></span>
+    </div>
+    <div class="flex items-center space-x-2">
+      <!-- Fast trigger to refresh manually -->
+      <button onclick="triggerSimulatedTick()" class="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 px-3 py-1.5 rounded-lg font-mono text-[9px] font-bold uppercase tracking-wider transition-all">
+        Sincronizar
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    // =========================================================================
+    // CONFIGURAÇÃO DA API REAL (BRAPI / YAHOO FINANCE)
+    // =========================================================================
+    const API_CONFIG = {
+      isMockMode: true,           // Mude para false para ler dados reais da API Brapi
+      apiKey: "bB44U4fN8Y99F9qsdZ",  // COLOQUE SUA CHAVE DA BRAPI AQUI
+      apiUrl: "https://brapi.dev/api/quote",
+      updateIntervalMs: 3000     // Intervalo de ciclo da pulsação simulada
+    };
+
+    // =========================================================================
+    // GLOBAL STATE & DATA STORAGE
+    // =========================================================================
+    // Mock master directory to guarantee complete offline reliability and smooth demo flow
+    const MASTER_MOCK_DATABASE = {
+      // Top 10 High Performers (Ganhadores das últimas 24h)
+      "PETR4": { name: "Petrobras PN", price: 38.65, variation: 4.85, high: 39.10, low: 36.80, spark: [36.8, 37.2, 38.0, 37.6, 38.3, 38.65] },
+      "VALE3": { name: "Vale SA ON", price: 61.20, variation: 3.42, high: 62.00, low: 59.90, spark: [59.9, 60.5, 60.2, 60.8, 61.1, 61.2] },
+      "ITUB4": { name: "Itaú Unibanco PN", price: 34.12, variation: 2.89, high: 34.50, low: 33.15, spark: [33.15, 33.4, 33.8, 33.6, 33.9, 34.12] },
+      "BBDC4": { name: "Bradesco PN", price: 14.85, variation: 2.54, high: 14.95, low: 14.30, spark: [14.3, 14.5, 14.4, 14.6, 14.7, 14.85] },
+      "WEGE3": { name: "Weg ON", price: 39.40, variation: 2.11, high: 39.80, low: 38.45, spark: [38.45, 38.8, 39.0, 39.1, 39.3, 39.4] },
+      "MGLU3": { name: "Magazine Luiza ON", price: 12.45, variation: 6.82, high: 12.70, low: 11.50, spark: [11.5, 11.9, 11.8, 12.1, 12.3, 12.45] },
+      "BBAS3": { name: "Banco do Brasil ON", price: 27.95, variation: 3.65, high: 28.10, low: 26.85, spark: [26.85, 27.1, 27.5, 27.4, 27.8, 27.95] },
+      "SUZB3": { name: "Suzano ON", price: 54.10, variation: 2.05, high: 54.50, low: 52.80, spark: [52.8, 53.1, 53.5, 53.3, 53.9, 54.10] },
+      "ABEV3": { name: "Ambev ON", price: 11.62, variation: 1.95, high: 11.75, low: 11.35, spark: [11.35, 11.45, 11.5, 11.4, 11.55, 11.62] },
+      "MXRF11": { name: "FII Maxi Renda", price: 10.32, variation: 1.15, high: 10.40, low: 10.20, spark: [10.2, 10.25, 10.3, 10.28, 10.31, 10.32] },
+      
+      // Secondary items often tracked by users
+      "XPML11": { name: "FII XP Malls", price: 116.40, variation: -0.45, high: 117.20, low: 115.80, spark: [116.8, 117.2, 116.5, 116.1, 116.0, 116.4] },
+      "HGLG11": { name: "FII CSHG Logística", price: 165.20, variation: 0.12, high: 166.00, low: 164.50, spark: [164.8, 165.0, 165.5, 165.1, 165.3, 165.2] },
+      "ELET3": { name: "Eletrobras ON", price: 42.15, variation: -1.20, high: 43.10, low: 41.90, spark: [43.0, 42.8, 42.5, 42.3, 42.0, 42.15] },
+      "SANB11": { name: "Banco Santander Unit", price: 29.80, variation: 0.85, high: 30.10, low: 29.40, spark: [29.4, 29.6, 29.5, 29.7, 29.9, 29.8] },
+      "RENT3": { name: "Localiza ON", price: 48.90, variation: -2.35, high: 50.40, low: 48.10, spark: [50.2, 49.8, 49.1, 48.5, 48.7, 48.9] }
+    };
+
+    // User watchlist state (persisted in LocalStorage)
+    let userWatchlist = ["XPML11", "HGLG11", "ELET3"];
+    // Tickers marked for active visual comparisons (max 4)
+    let selectedComparisons = ["PETR4", "VALE3", "XPML11"];
+    let comparisonChartInstance = null;
+
+    // Load state from local storage on startup
+    function loadSavedWallet() {
+      const saved = localStorage.getItem("bolsa_monitor_watchlist");
+      if (saved) {
+        try {
+          userWatchlist = JSON.parse(saved);
+        } catch (e) {
+          console.error("Erro interpretando LocalStorage", e);
+        }
+      }
+    }
+
+    // Save to storage helper
+    function saveWalletToStorage() {
+      localStorage.setItem("bolsa_monitor_watchlist", JSON.stringify(userWatchlist));
+    }
+
+    // =========================================================================
+    // TAB NAVIGATION SCRIPT
+    // =========================================================================
+    function switchTab(tabId) {
+      // Hide all views
+      document.getElementById('view-dashboard').classList.add('hidden');
+      document.getElementById('view-wallet').classList.add('hidden');
+      document.getElementById('view-comparator').classList.add('hidden');
+      
+      // Inactivate all tab buttons styles matching "Frosted Glass" design guidelines
+      const tabs = ['dashboard', 'wallet', 'comparator'];
+      tabs.forEach(t => {
+        const el = document.getElementById(`tab-${t}`);
+        el.className = "flex-1 text-center py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 text-slate-400 hover:text-white";
+      });
+
+      // Show active view
+      document.getElementById(`view-${tabId}`).classList.remove('hidden');
+      // Highlight active button using frosted glass elements
+      document.getElementById(`tab-${tabId}`).className = "flex-1 text-center py-2.5 text-xs font-bold rounded-xl transition-all duration-200 bg-white/[0.08] border border-white/[0.12] text-white shadow-sm";
+      
+      // Specific action on switching
+      if (tabId === 'comparator') {
+        renderComparator();
+      }
+    }
+
+    // =========================================================================
+    // RENDER LOGICAL MODULES
+    // =========================================================================
+    
+    // 1. Render Top 10 High Gainers inside beautiful Frosted Glass elements
+    function renderTop10() {
+      const top10Container = document.getElementById("top-10-list");
+      top10Container.innerHTML = "";
+      
+      // Sort master DB by Variation Descending, choose top 10
+      const activeTickers = Object.keys(MASTER_MOCK_DATABASE)
+        .sort((a,b) => MASTER_MOCK_DATABASE[b].variation - MASTER_MOCK_DATABASE[a].variation)
+        .slice(0, 10);
+        
+      activeTickers.forEach(ticker => {
+        const asset = MASTER_MOCK_DATABASE[ticker];
+        const isUp = asset.variation >= 0;
+        const colorClass = isUp ? "text-emerald-400 bg-emerald-900/15 border-emerald-500/10" : "text-rose-400 bg-rose-900/15 border-rose-500/10";
+        const sign = isUp ? "+" : "";
+        const flashId = `flash-top-${ticker}`;
+        
+        top10Container.innerHTML += `
+          <div id="${flashId}" class="glass-card duration-500 px-3.5 py-2.5 rounded-2xl flex items-center justify-between hover:border-white/15 transition-all select-none">
+            <div onclick="addTickerFromSelection('${ticker}')" class="flex items-center space-x-3 cursor-pointer flex-1">
+              <div class="flex flex-col">
+                <span class="text-xs font-bold font-mono tracking-wider text-slate-200 flex items-center">
+                  ${ticker}
+                  <small class="ml-1.5 text-[8px] bg-white/10 px-1.5 py-0.5 rounded text-indigo-400">Add</small>
+                </span>
+                <span class="text-[10px] text-slate-400 font-medium truncate max-w-[120px]">${asset.name}</span>
+              </div>
+            </div>
+            
+            <!-- Quick Trend mini Sparkline -->
+            <div class="w-16 h-8 flex items-center pr-2">
+              <svg class="w-full h-full" viewBox="0 0 100 30">
+                <polyline
+                  fill="none"
+                  stroke="${isUp ? '#34d399' : '#f87171'}"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  points="${createSparklineCoordinates(asset.spark)}"
+                />
+              </svg>
+            </div>
+
+            <!-- Price and variation Info -->
+            <div class="text-right flex flex-col justify-center">
+              <span class="text-xs font-bold font-mono text-slate-100 py-0.5 px-1 rounded transition-all duration-300">R$ ${asset.price.toFixed(2)}</span>
+              <span class="inline-block text-[10px] rounded font-semibold font-mono ${colorClass} px-2 py-0.5 text-center leading-none mt-1">
+                ${sign}${asset.variation.toFixed(2)}%
+              </span>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // Transform raw prices array into clean points for SVGs
+    function createSparklineCoordinates(sparkPoints) {
+      if (!sparkPoints || sparkPoints.length < 2) return "0,15 100,15";
+      const min = Math.min(...sparkPoints);
+      const max = Math.max(...sparkPoints);
+      const range = max - min || 1;
+      
+      return sparkPoints.map((val, idx) => {
+        const x = (idx / (sparkPoints.length - 1)) * 100;
+        // SVG coordinates start 0 at top, so invert
+        const y = 26 - ((val - min) / range) * 22;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+    }
+
+    // 2. Render Personal Watch-list with persistence and frosted-glass visuals
+    function renderWallet() {
+      const container = document.getElementById("wallet-list");
+      const countBadge = document.getElementById("wallet-count-badge");
+      
+      countBadge.innerHTML = `${userWatchlist.length} / 10 ativos`;
+      
+      if (userWatchlist.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-10 text-xs text-slate-500 glass-card rounded-2xl border-dashed">
+            Nenhuma ação adicionada à carteira. Digite o Ticker acima para começar!
+          </div>
+        `;
+        return;
+      }
+      
+      container.innerHTML = "";
+      userWatchlist.forEach(ticker => {
+        const asset = MASTER_MOCK_DATABASE[ticker];
+        
+        // Safety handler for imported or unknown tickers not fully loaded yet in mock database
+        const price = asset ? asset.price : 0.00;
+        const variation = asset ? asset.variation : 0.00;
+        const name = asset ? asset.name : "Ativo Personalizado";
+        const isUp = variation >= 0;
+        const colorClass = isUp ? "text-emerald-400 bg-emerald-950/20 border-emerald-500/20" : "text-rose-400 bg-rose-950/20 border-rose-500/20";
+        const sign = isUp ? "+" : "";
+        const idStr = `wallet-item-${ticker}`;
+        
+        container.innerHTML += `
+          <div id="${idStr}" class="glass-card rounded-2xl px-4 py-3 flex items-center justify-between shadow-sm hover:border-white/15 transition-all select-none">
+            <div class="flex items-center space-x-3 flex-1">
+              <!-- Delete/trash asset -->
+              <button onclick="removeTicker('${ticker}')" class="text-slate-500 hover:text-rose-400 transition-colors p-1" title="Excluir Ativo">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+              
+              <div class="flex flex-col">
+                <span class="text-xs font-bold font-mono tracking-wider text-slate-100">${ticker}</span>
+                <span class="text-[10px] text-slate-400 font-medium max-w-[120px] truncate">${name}</span>
+              </div>
+            </div>
+            
+            <div class="text-right flex items-center space-x-3">
+              <div class="flex flex-col text-right">
+                <span class="text-xs font-bold font-mono">R$ ${price.toFixed(2)}</span>
+                <span class="inline-block text-[9px] rounded font-bold font-mono ${colorClass} px-1.5 py-0.5 mt-0.5">
+                  ${sign}${variation.toFixed(2)}%
+                </span>
+              </div>
+              
+              <!-- Quick compare toggle box right inside list -->
+              <input type="checkbox" 
+                     id="chk-${ticker}" 
+                     ${selectedComparisons.includes(ticker) ? 'checked' : ''} 
+                     onchange="toggleFromCheckbox('${ticker}', this.checked)"
+                     class="w-4 h-4 text-indigo-500 bg-black/40 rounded border-white/10 focus:ring-indigo-500 focus:ring-offset-slate-900 focus:ring-2">
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // 3. Render Comparador Screen (Selections, dynamic table stats and interactive chart)
+    function renderComparator() {
+      const pillContainer = document.getElementById("comparator-selector-pills");
+      pillContainer.innerHTML = "";
+      
+      // Join all available keys for comparison
+      const availableTickers = Array.from(new Set([
+        ...Object.keys(MASTER_MOCK_DATABASE).slice(0, 10), // The active 10 dashboard items
+        ...userWatchlist                                  // The personal items
+      ]));
+      
+      availableTickers.forEach(ticker => {
+        const isSelected = selectedComparisons.includes(ticker);
+        const activeClass = isSelected 
+          ? "bg-violet-600 border-violet-400 text-white shadow-md font-bold" 
+          : "bg-white/[0.02] border-white/[0.08] text-slate-400 hover:text-white";
+          
+        pillContainer.innerHTML += `
+          <button onclick="toggleComparisonSelection('${ticker}')" 
+                  class="text-[11px] font-mono border px-3 py-1.5 rounded-xl transition-all duration-150 ${activeClass}">
+            ${ticker} ${isSelected ? '✓' : '+'}
+          </button>
+        `;
+      });
+
+      // Display or suppress layout based on minimum selections
+      const emptyState = document.getElementById("comparison-empty-state");
+      const displayPanel = document.getElementById("comparison-display");
+      
+      if (selectedComparisons.length < 2) {
+        emptyState.classList.remove("hidden");
+        displayPanel.classList.add("hidden");
+        return;
+      }
+      
+      emptyState.classList.add("hidden");
+      displayPanel.classList.remove("hidden");
+      
+      // Populate comparative details table
+      const tableBody = document.getElementById("comparison-table-body");
+      tableBody.innerHTML = "";
+      
+      selectedComparisons.forEach(ticker => {
+        const asset = MASTER_MOCK_DATABASE[ticker];
+        if (!asset) return;
+        
+        const isUp = asset.variation >= 0;
+        const colorClass = isUp ? "text-emerald-400" : "text-rose-400";
+        const sign = isUp ? "+" : "";
+        
+        tableBody.innerHTML += `
+          <tr class="hover:bg-white/[0.02] transition-colors">
+            <td class="p-3 font-bold text-slate-200">
+              <span class="block text-xs font-mono">${ticker}</span>
+              <span class="block text-[9px] text-slate-500 font-sans font-normal truncate max-w-[100px]">${asset.name}</span>
+            </td>
+            <td class="p-3 text-right text-xs text-white">R$ ${asset.price.toFixed(2)}</td>
+            <td class="p-3 text-right text-xs ${colorClass} font-bold">${sign}${asset.variation.toFixed(2)}%</td>
+            <td class="p-3 text-right text-xs text-slate-400">R$ ${asset.low.toFixed(2)}</td>
+            <td class="p-3 text-right text-xs text-slate-400">R$ ${asset.high.toFixed(2)}</td>
+          </tr>
+        `;
+      });
+
+      // Draw/Update Chart.js Comparison Graph with modern design gridlines to fit glass style
+      drawComparisonChart();
+    }
+
+    // Draw high quality financial comparisons bar/line with Chart.js
+    function drawComparisonChart() {
+      const ctx = document.getElementById('comparator-chart').getContext('2d');
+      
+      // Destroy previous chart instance if existing to prevent overlays
+      if (comparisonChartInstance) {
+        comparisonChartInstance.destroy();
+      }
+      
+      // Get variation data
+      const labels = selectedComparisons;
+      const dataValues = selectedComparisons.map(ticker => {
+        const asset = MASTER_MOCK_DATABASE[ticker];
+        return asset ? asset.variation : 0.00;
+      });
+      
+      // Dynamic color assignments according to trend
+      const backgroundColors = dataValues.map(val => val >= 0 ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)');
+      const borderColors = dataValues.map(val => val >= 0 ? 'rgba(16, 185, 129, 1)' : 'rgba(239, 68, 68, 1)');
+      
+      comparisonChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Variação % Intraday',
+            data: dataValues,
+            backgroundColor: backgroundColors,
+            borderColor: borderColors,
+            borderWidth: 2,
+            borderRadius: 6,
+            barThickness: 24
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              enabled: true,
+              callbacks: {
+                label: function(context) { return `Variação: ${context.parsed.y.toFixed(2)}%`; }
+              },
+              backgroundColor: '#111524',
+              titleFont: { family: 'monospace', size: 12 },
+              bodyFont: { family: 'monospace', size: 12 }
+            }
+          },
+          scales: {
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)', borderDash: [2, 2] },
+              ticks: {
+                color: '#94a3b8',
+                font: { family: 'monospace', size: 10 },
+                callback: function(v) { return v + '%'; }
+              }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#94a3b8', font: { family: 'monospace', size: 10, weight: 'bold' } }
+            }
+          }
+        }
+      });
+    }
+
+    // =========================================================================
+    // TICKER ACTIONS & USER SAFETY CONTROLS
+    // =========================================================================
+    
+    // Auto add when user taps on any top 10 item
+    function addTickerFromSelection(ticker) {
+      if (userWatchlist.includes(ticker)) {
+        showToast("Ativo já está em sua carteira!");
+        return;
+      }
+      if (userWatchlist.length >= 10) {
+        showToast("Limite excedido! Máximo de 10 ativos monitorados simultaneamente.");
+        return;
+      }
+      userWatchlist.push(ticker);
+      saveWalletToStorage();
+      renderWallet();
+      showToast(`${ticker} adicionado à Carteira pessoal!`, false);
+    }
+
+    // Standard input add validation
+    function addTickerFromInput() {
+      const input = document.getElementById("ticker-input");
+      const ticker = input.value.trim().toUpperCase();
+      
+      if (!ticker) {
+        showToast("Digite um código de ativo válido!");
+        return;
+      }
+      
+      // Basic ticker format validator (e.g. standard B3 asset has alphabetic prefix + numeric suffix)
+      const tickerRegex = /^[A-Z0-9]{4,6}$/;
+      if (!tickerRegex.test(ticker)) {
+        showToast("Ticker inválido! Formato esperado: de 4 a 6 caracteres alfanuméricos.");
+        return;
+      }
+      
+      if (userWatchlist.includes(ticker)) {
+        showToast("Este ativo já está em sua carteira pessoal.");
+        return;
+      }
+      
+      if (userWatchlist.length >= 10) {
+        showToast("Limite atingido! Remova algum item antes de adicionar novos.");
+        return;
+      }
+
+      // Add to our runtime mock database if not already structured there to preserve visual stability
+      if (!MASTER_MOCK_DATABASE[ticker]) {
+        // Instantiate real looking ticker attributes
+        const initialPrice = 15.00 + (Math.random() * 85.00);
+        MASTER_MOCK_DATABASE[ticker] = {
+          name: `${ticker} S.A. Corp`,
+          price: initialPrice,
+          variation: -1.5 + (Math.random() * 4.0),
+          high: initialPrice + (Math.random() * 1.5),
+          low: initialPrice - (Math.random() * 1.5),
+          spark: Array.from({length: 6}, () => initialPrice + (Math.random() - 0.5)*3 )
+        };
+      }
+      
+      userWatchlist.push(ticker);
+      saveWalletToStorage();
+      
+      // Clean UI input, reload lists
+      input.value = "";
+      renderWallet();
+      showToast(`${ticker} adicionado com sucesso!`, false);
+    }
+
+    // Remotion from watchlist
+    function removeTicker(ticker) {
+      userWatchlist = userWatchlist.filter(item => item !== ticker);
+      // Clean comparator if it was deleted
+      selectedComparisons = selectedComparisons.filter(item => item !== ticker);
+      saveWalletToStorage();
+      renderWallet();
+      showToast(`Ativo removido/excluído de sua carteira.`);
+    }
+
+    // Comparator checkboxes/pills controllers
+    function toggleComparisonSelection(ticker) {
+      if (selectedComparisons.includes(ticker)) {
+        // Remove
+        selectedComparisons = selectedComparisons.filter(t => t !== ticker);
+      } else {
+        // Insert with soft limit of 4 items for layout/chart aesthetics
+        if (selectedComparisons.length >= 4) {
+          showToast("Comparação limitada a no máximo 4 ativos simultâneos.");
+          return;
+        }
+        selectedComparisons.push(ticker);
+      }
+      renderComparator();
+    }
+
+    function toggleFromCheckbox(ticker, isChecked) {
+      if (isChecked) {
+        if (selectedComparisons.length >= 4) {
+          showToast("Comparação limitada a no máximo 4 ativos simultâneos.");
+          document.getElementById(`chk-${ticker}`).checked = false;
+          return;
+        }
+        if (!selectedComparisons.includes(ticker)) {
+          selectedComparisons.push(ticker);
+        }
+      } else {
+        selectedComparisons = selectedComparisons.filter(t => t !== ticker);
+      }
+    }
+
+    // Elegant alert popup
+    function showToast(text, isDanger = true) {
+      const toast = document.getElementById("alert-toast");
+      const toastText = document.getElementById("alert-toast-text");
+      
+      toastText.textContent = text;
+      
+      if (isDanger) {
+        toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 bg-rose-950/80 backdrop-blur-md border border-rose-500/40 text-rose-100 px-4 py-2.5 rounded-xl shadow-2xl text-[11px] font-semibold tracking-wide flex items-center space-x-2.5 transition-all duration-300 opacity-100 transform translate-y-0 z-50 animate-bounce";
+      } else {
+        toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur-md border border-violet-500/40 text-slate-100 px-4 py-2.5 rounded-xl shadow-2xl text-[11px] font-semibold tracking-wide flex items-center space-x-2.5 transition-all duration-300 opacity-100 transform translate-y-0 z-50";
+      }
+      
+      // Auto dismiss after 2.5 seconds
+      setTimeout(() => {
+        toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 bg-slate-950/80 backdrop-blur-md text-slate-400 px-4 py-2.5 rounded-xl shadow-2xl text-[11px] font-semibold tracking-wide flex items-center space-x-2.5 transition-all duration-300 opacity-0 pointer-events-none transform translate-y-3 z-50";
+      }, 2500);
+    }
+
+    // =========================================================================
+    // DYNAMIC TICK LIVE ENGINE (REAL VS SIMULATION)
+    // =========================================================================
+    
+    // Triggers a simulated price fluctuation across all active assets
+    function triggerSimulatedTick() {
+      Object.keys(MASTER_MOCK_DATABASE).forEach(ticker => {
+        const asset = MASTER_MOCK_DATABASE[ticker];
+        
+        // Random micro factor -0.4% to +0.45%
+        const variationFactor = -0.004 + (Math.random() * 0.0085);
+        const oldPrice = asset.price;
+        const newPrice = oldPrice * (1 + variationFactor);
+        
+        // Save price and boundaries
+        asset.price = parseFloat(newPrice.toFixed(2));
+        if (asset.price > asset.high) asset.high = asset.price;
+        if (asset.price < asset.low) asset.low = asset.price;
+        
+        // Add random mock variance vector and compute 24h variation
+        asset.variation = parseFloat((asset.variation + (variationFactor * 100)).toFixed(2));
+        
+        // Progressively slide Sparkline array
+        asset.spark.shift();
+        asset.spark.push(asset.price);
+        
+        // Visual flashing effect on specific elements
+        const elementIdTabTop = `flash-top-${ticker}`;
+        const walletId = `wallet-item-${ticker}`;
+        const directionClass = variationFactor >= 0 ? "flash-up" : "flash-down";
+        
+        const topEl = document.getElementById(elementIdTabTop);
+        if (topEl) {
+          topEl.classList.add(directionClass);
+          setTimeout(() => topEl.classList.remove(directionClass), 1000);
+        }
+        
+        const walletEl = document.getElementById(walletId);
+        if (walletEl) {
+          walletEl.classList.add(directionClass);
+          setTimeout(() => walletEl.classList.remove(directionClass), 1000);
+        }
+      });
+      
+      // Update UI with newly simulated values
+      renderTop10();
+      renderWallet();
+      
+      // If comparator is actively displaying values, update the live values/chart
+      const activeTabButton = document.getElementById("tab-comparator");
+      if (activeTabButton.className.includes("bg-white/[0.08]")) {
+        renderComparator();
+      }
+    }
+
+    // Simulated tick interval
+    let tickerIntervalInstance = null;
+    function startSimulationEngine() {
+      if (tickerIntervalInstance) clearInterval(tickerIntervalInstance);
+      tickerIntervalInstance = setInterval(() => {
+        if (API_CONFIG.isMockMode) {
+          triggerSimulatedTick();
+        }
+      }, API_CONFIG.updateIntervalMs);
+    }
+
+    // =========================================================================
+    // BBRAPI REAL INTEGRATION (READY FOR PRODUCTION DEPLOYMENT)
+    // =========================================================================
+    async function fetchRealMarketData() {
+      if (API_CONFIG.isMockMode) return;
+      
+      const allActiveTickers = Array.from(new Set([
+        ...Object.keys(MASTER_MOCK_DATABASE).slice(0, 10),
+        ...userWatchlist
+      ]));
+
+      const tickersQuery = allActiveTickers.join(",");
+      const url = `${API_CONFIG.apiUrl}/${tickersQuery}?token=${API_CONFIG.apiKey}`;
+
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Erro de resposta da API Brapi");
+        const rawData = await response.json();
+        
+        if (rawData && rawData.results) {
+          rawData.results.forEach(result => {
+            const ticker = result.symbol;
+            if (MASTER_MOCK_DATABASE[ticker]) {
+              MASTER_MOCK_DATABASE[ticker].price = result.regularMarketPrice;
+              MASTER_MOCK_DATABASE[ticker].name = result.longName || result.shortName || MASTER_MOCK_DATABASE[ticker].name;
+              MASTER_MOCK_DATABASE[ticker].variation = result.regularMarketChangePercent;
+              MASTER_MOCK_DATABASE[ticker].high = result.regularMarketDayHigh || MASTER_MOCK_DATABASE[ticker].price;
+              MASTER_MOCK_DATABASE[ticker].low = result.regularMarketDayLow || MASTER_MOCK_DATABASE[ticker].price;
+            } else {
+              MASTER_MOCK_DATABASE[ticker] = {
+                name: result.longName || result.shortName || `${ticker} S.A.`,
+                price: result.regularMarketPrice,
+                variation: result.regularMarketChangePercent,
+                high: result.regularMarketDayHigh || result.regularMarketPrice,
+                low: result.regularMarketDayLow || result.regularMarketPrice,
+                spark: [result.regularMarketPrice * 0.98, result.regularMarketPrice * 0.99, result.regularMarketPrice]
+              };
+            }
+          });
+          
+          // Re-render interfaces with genuine API feedback
+          renderTop10();
+          renderWallet();
+          
+          document.getElementById("connection-text").textContent = "Conectado";
+          document.getElementById("connection-text").className = "text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider";
+          document.getElementById("connection-indicator").className = "w-2 h-2 rounded-full bg-emerald-500";
+        }
+      } catch (err) {
+        console.error("Erro consultando API Brapi, retornando para mock local", err);
+        document.getElementById("connection-text").textContent = "Err / Offline";
+        document.getElementById("connection-text").className = "text-[10px] font-mono text-rose-400 font-bold uppercase tracking-wider";
+        document.getElementById("connection-indicator").className = "w-2 h-2 rounded-full bg-rose-500 animate-pulse";
+      }
+    }
+
+    // =========================================================================
+    // RUNTIME STARTUP CODE
+    // =========================================================================
+    window.addEventListener("DOMContentLoaded", () => {
+      // Load stored lists
+      loadSavedWallet();
+      
+      // Render components
+      renderTop10();
+      renderWallet();
+      
+      // Run simulations
+      startSimulationEngine();
+      
+      // Check for Real Connection if configured
+      if (!API_CONFIG.isMockMode) {
+        fetchRealMarketData();
+        // Regular real-world background fetch cycle
+        setInterval(fetchRealMarketData, 15000);
+      }
+    });
+  </script>
+</body>
+</html>
